@@ -22,25 +22,22 @@ interface StdoutBuffer {
 
 function resolveReasonixBinary(binary: string): { cmd: string; args: string[]; shell: boolean } {
   if (process.platform !== 'win32' || binary !== 'reasonix') return { cmd: binary, args: [], shell: false };
-  // pnpm installs a .CMD wrapper that breaks with shell:true + special chars in prompt.
+  // CMD wrappers (.CMD) break with shell:true + special chars in prompt.
   // Parse the wrapper to extract the real .js entry point, then invoke node directly.
-  const pnpmBin = join(process.env.LOCALAPPDATA ?? join(process.env.HOME ?? '', 'AppData', 'Local'), 'pnpm', 'bin');
-  const cmdFile = join(pnpmBin, 'reasonix.CMD');
-  try {
-    const content = readFileSync(cmdFile, 'utf-8');
-    // CMD file contains lines like: node  "%~dp0\..\global\v11\...\reasonix\dist\cli\index.js" %*
-    const match = content.match(/node\s+"([^"]+\.js)"/i);
-    if (match?.[1]) {
-      // %~dp0 resolves to the CMD file's directory (with trailing backslash)
-      const entryPath = match[1].replace(/%~dp0[\\\/]?/gi, pnpmBin + '\\');
-      const abs = resolve(entryPath);
-      try {
-        if (statSync(abs).isFile()) return { cmd: 'node', args: [abs], shell: false };
-      } catch { /* file doesn't exist at resolved path */ }
-    }
-  } catch { /* CMD file not found */ }
-  // Fallback: search pnpm global store directories
+
+  // 1. Try known CMD locations: pnpm bin, npm global
+  const appData = process.env.APPDATA ?? join(process.env.HOME ?? '', 'AppData', 'Roaming');
   const localAppData = process.env.LOCALAPPDATA ?? join(process.env.HOME ?? '', 'AppData', 'Local');
+  const cmdCandidates = [
+    join(localAppData, 'pnpm', 'bin', 'reasonix.CMD'),
+    join(appData, 'npm', 'reasonix.CMD'),
+  ];
+  for (const cmdFile of cmdCandidates) {
+    const parsed = parseCmdEntry(cmdFile);
+    if (parsed) return parsed;
+  }
+
+  // 2. Search pnpm global store (nested hash dirs)
   const pnpmGlobal = join(localAppData, 'pnpm', 'global');
   try {
     for (const ver of readdirSync(pnpmGlobal)) {
@@ -55,8 +52,27 @@ function resolveReasonixBinary(binary: string): { cmd: string; args: string[]; s
       } catch { /* ver dir not readable */ }
     }
   } catch { /* pnpm global dir doesn't exist */ }
+
+  // 3. npm global node_modules directly
+  const npmGlobal = join(appData, 'npm', 'node_modules', 'reasonix', 'dist', 'cli', 'index.js');
+  try { if (statSync(npmGlobal).isFile()) return { cmd: 'node', args: [npmGlobal], shell: false }; } catch { /* not found */ }
+
   // Last resort: shell mode (will break with special chars in prompt)
   return { cmd: binary, args: [], shell: true };
+}
+
+/** Parse a .CMD wrapper file to extract the node entry-point .js path. */
+function parseCmdEntry(cmdFile: string): { cmd: string; args: string[]; shell: boolean } | null {
+  try {
+    const content = readFileSync(cmdFile, 'utf-8');
+    const match = content.match(/node\s+"([^"]+\.js)"/i);
+    if (!match?.[1]) return null;
+    const cmdDir = cmdFile.slice(0, cmdFile.lastIndexOf('\\'));
+    const entryPath = match[1].replace(/%~dp0[\\\/]?/gi, cmdDir + '\\');
+    const abs = resolve(entryPath);
+    if (statSync(abs).isFile()) return { cmd: 'node', args: [abs], shell: false };
+  } catch { /* file not found or unreadable */ }
+  return null;
 }
 
 export class ReasonixAdapter implements AgentAdapter {
