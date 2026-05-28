@@ -26,26 +26,29 @@ function resolveReasonixBinary(binary: string): { cmd: string; args: string[]; s
   // Instead, invoke node directly with the entry-point .js file.
   const localAppData = process.env.LOCALAPPDATA ?? join(process.env.HOME ?? '', 'AppData', 'Local');
   const pnpmGlobal = join(localAppData, 'pnpm', 'global');
-  // pnpm global structure: v11/<store-hash>/node_modules/reasonix/dist/cli/index.js
+  // Collect all candidate entry points
+  const candidates: string[] = [];
   try {
     for (const ver of readdirSync(pnpmGlobal)) {
       const verDir = join(pnpmGlobal, ver);
-      // First try direct: v11/node_modules/reasonix/...
       const direct = join(verDir, 'node_modules', 'reasonix', 'dist', 'cli', 'index.js');
-      try {
-        if (statSync(direct).isFile()) return { cmd: 'node', args: [direct], shell: false };
-      } catch { /* not here */ }
-      // Then try store hashes: v11/<hash>/node_modules/reasonix/...
+      try { if (statSync(direct).isFile()) candidates.push(direct); } catch { /* not here */ }
       try {
         for (const hash of readdirSync(verDir)) {
           const candidate = join(verDir, hash, 'node_modules', 'reasonix', 'dist', 'cli', 'index.js');
-          try {
-            if (statSync(candidate).isFile()) return { cmd: 'node', args: [candidate], shell: false };
-          } catch { /* not in this hash dir */ }
+          try { if (statSync(candidate).isFile()) candidates.push(candidate); } catch { /* not here */ }
         }
       } catch { /* ver dir not readable */ }
     }
   } catch { /* pnpm global dir doesn't exist */ }
+  // Test each candidate with --version; return the first that works
+  const { execFileSync } = require('node:child_process');
+  for (const entry of candidates) {
+    try {
+      execFileSync('node', [entry, '--version'], { stdio: 'ignore', timeout: 10_000 });
+      return { cmd: 'node', args: [entry], shell: false };
+    } catch { /* this candidate is broken, try next */ }
+  }
   // Fallback: let the system resolve `reasonix` via PATH (may break with shell:true)
   return { cmd: binary, args: [], shell: true };
 }
