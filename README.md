@@ -1,86 +1,88 @@
 # feishu-reasonix-bridge
 
-在飞书/Lark 聊天中运行本地 **Reasonix**（DeepSeek）CLI，支持会话、附件和后台服务。
+Run local **Reasonix** (DeepSeek) CLI from Feishu / Lark chat, with sessions, attachments, and background service support.
 
 This project is built with reference to [zarazhangrui/feishu-claude-code-bridge](https://github.com/zarazhangrui/feishu-claude-code-bridge), with thanks for the original design and implementation.
 
-## 功能
+[中文文档](./README.zh.md)
 
-- 飞书 / Lark 消息（私聊或群内 `@bot`）转发到本地 `reasonix` CLI
-- **流式回复**：Reasonix 输出实时更新到飞书卡片
-- **多代理路由**：通过 `agentRoutes` 配置不同聊天使用不同代理（Claude / Reasonix）
-- **会话管理**：每个聊天独立会话，断点续聊
-- **消息合并**：快速连续消息合并为一次请求
-- **工作空间**：`/ws` 切换项目目录
-- **访问控制**：支持用户白名单、聊天白名单、管理员列表
+## Features
 
-## 环境要求
+- Forwards Feishu / Lark messages (DM or `@bot` in groups) to your local `reasonix` CLI
+- **Streaming reply**: Reasonix output updates on a Lark card in real time
+- **Multi-agent routing**: configure `agentRoutes` to route different chats to different agents (Claude / Reasonix)
+- **Per-chat sessions**: each chat keeps its own session
+- **Preempt + batch**: new messages interrupt the running run; rapid-fire messages get coalesced
+- **Workspaces**: `/ws` switches between named project directories
+- **Access control**: user allowlist, chat allowlist, admin list
+
+## Prerequisites
 
 - Node.js **>= 20**
-- `reasonix` CLI — 参见 [DeepSeek-Reasonix](https://github.com/esengine/DeepSeek-Reasonix)
-- 飞书 / Lark **PersonalAgent** 应用（首次运行扫码创建）
+- `reasonix` CLI — see [DeepSeek-Reasonix](https://github.com/esengine/DeepSeek-Reasonix)
+- A Lark / Feishu **PersonalAgent** app (the QR-code wizard on first launch can create one for you)
 
-## 安装
+## Install
 
 ```bash
 npm i -g feishu-reasonix-bridge
-# 或
+# or
 pnpm add -g feishu-reasonix-bridge
 ```
 
-## 首次运行
+## First run
 
 ```bash
 feishu-reasonix-bridge run
 ```
 
-首次运行会打开扫码向导：
+The first run opens a QR-code wizard:
 
-1. 终端显示二维码
-2. 用飞书 / Lark 扫码
-3. 选择或创建 PersonalAgent 应用
-4. 凭据保存到 `~/.lark-channel/config.json`
+1. A QR code renders in your terminal
+2. Scan it with the Feishu / Lark app
+3. Pick or create a PersonalAgent app
+4. Credentials are saved to `~/.lark-channel/config.json`
 
-## 命令
+## Commands
 
-### 宿主 CLI
-
-```
-feishu-reasonix-bridge run [-c <config>]     前台运行
-feishu-reasonix-bridge ps                    查看运行中的 bridge 进程
-feishu-reasonix-bridge kill <id|#>           终止进程
-feishu-reasonix-bridge --help                查看所有命令
-```
-
-### 后台服务
+### Host CLI
 
 ```
-feishu-reasonix-bridge start                 安装并启动后台服务
-feishu-reasonix-bridge stop                  停止服务
-feishu-reasonix-bridge restart               重启服务
-feishu-reasonix-bridge status                查看服务状态
+feishu-reasonix-bridge run [-c <config>]     Run the bridge in the foreground
+feishu-reasonix-bridge ps                    List running bridge processes
+feishu-reasonix-bridge kill <id|#>           Kill a bridge process
+feishu-reasonix-bridge --help                List all commands
 ```
 
-### 飞书 / Lark 内斜杠命令
+### Background service
 
-| 命令 | 功能 |
+```
+feishu-reasonix-bridge start                 Install and start the daemon
+feishu-reasonix-bridge stop                  Stop the daemon
+feishu-reasonix-bridge restart               Restart the daemon
+feishu-reasonix-bridge status                Show daemon status
+```
+
+### Slash commands inside Feishu / Lark
+
+| Command | Effect |
 |---|---|
-| `/new`, `/reset` | 清除当前会话 |
-| `/cd <path>` | 切换工作目录 |
-| `/ws list` | 列出命名工作空间 |
-| `/ws save <name>` | 保存当前目录为工作空间 |
-| `/ws use <name>` | 切换工作空间 |
-| `/status` | 查看当前状态 |
-| `/config` | 调整配置 |
-| `/stop` | 停止当前运行 |
-| `/timeout [N\|off]` | 设置空闲超时（分钟） |
-| `/help` | 帮助卡片 |
+| `/new`, `/reset` | Clear the current session |
+| `/cd <path>` | Switch working directory |
+| `/ws list` | List named workspaces |
+| `/ws save <name>` | Save current cwd as a workspace |
+| `/ws use <name>` | Switch to a workspace |
+| `/status` | Show current status |
+| `/config` | Adjust preferences |
+| `/stop` | Stop the running agent |
+| `/timeout [N\|off]` | Set idle timeout (minutes) |
+| `/help` | Help card |
 
-## 配置
+## Configuration
 
-配置文件位于 `~/.lark-channel/config.json`。
+Config file: `~/.lark-channel/config.json`
 
-### 多代理路由
+### Multi-agent routing
 
 ```json
 {
@@ -94,10 +96,10 @@ feishu-reasonix-bridge status                查看服务状态
 }
 ```
 
-- `defaultAgent`：默认代理，可选 `claude` 或 `reasonix`
-- `agentRoutes`：按 `chat_id` 路由到不同代理
+- `defaultAgent`: fallback agent (`claude` or `reasonix`)
+- `agentRoutes`: route by `chat_id` to a specific agent
 
-### 访问控制
+### Access control
 
 ```json
 {
@@ -111,21 +113,21 @@ feishu-reasonix-bridge status                查看服务状态
 }
 ```
 
-## 数据目录
+## Data directories
 
-| 路径 | 内容 |
+| Path | Content |
 |---|---|
-| `~/.lark-channel/config.json` | 应用凭据 |
-| `~/.lark-channel/sessions.json` | 会话映射 |
-| `~/.lark-channel/workspaces.json` | 工作空间 |
-| `~/.lark-channel/media/<chatId>/` | 下载的文件（24h 后清理） |
-| `~/.lark-channel/logs/YYYY-MM-DD.log` | 运行日志 |
+| `~/.lark-channel/config.json` | App credentials |
+| `~/.lark-channel/sessions.json` | Session mappings |
+| `~/.lark-channel/workspaces.json` | Named workspaces |
+| `~/.lark-channel/media/<chatId>/` | Downloaded files (cleaned after 24h) |
+| `~/.lark-channel/logs/YYYY-MM-DD.log` | Structured run logs |
 
-## 常见问题
+## FAQ
 
-**Bot 没有回复**：检查 `reasonix` CLI 是否已安装并登录。发送 `/status` 查看状态。
+**Bot stays silent**: check if `reasonix` CLI is installed and logged in. Send `/status` to inspect.
 
-**回复卡住**：发送 `/stop` 终止当前运行，或用 `/config` 设置空闲超时。
+**Reply stuck**: send `/stop` to terminate, or use `/config` to set an idle timeout.
 
 ## License
 
