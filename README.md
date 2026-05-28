@@ -2,6 +2,8 @@
 
 Run local **Reasonix** (DeepSeek) CLI from Feishu / Lark chat, with sessions, attachments, and background service support.
 
+> **Platform: Windows** — This project has been tested and optimized for Windows. Reasonix binary resolution handles both `pnpm` and `npm` global installs on Windows (parsing `.CMD` wrappers to avoid `cmd.exe` shell escaping issues). macOS/Linux may work but are not yet tested.
+
 This project is built with reference to [zarazhangrui/feishu-claude-code-bridge](https://github.com/zarazhangrui/feishu-claude-code-bridge), with thanks for the original design and implementation.
 
 [中文文档](./README.zh.md)
