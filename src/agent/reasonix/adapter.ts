@@ -26,13 +26,24 @@ function resolveReasonixBinary(binary: string): { cmd: string; args: string[]; s
   // Instead, invoke node directly with the entry-point .js file.
   const localAppData = process.env.LOCALAPPDATA ?? join(process.env.HOME ?? '', 'AppData', 'Local');
   const pnpmGlobal = join(localAppData, 'pnpm', 'global');
-  // Find the first store directory that contains reasonix
+  // pnpm global structure: v11/<store-hash>/node_modules/reasonix/dist/cli/index.js
   try {
     for (const ver of readdirSync(pnpmGlobal)) {
-      const candidate = join(pnpmGlobal, ver, 'node_modules', 'reasonix', 'dist', 'cli', 'index.js');
+      const verDir = join(pnpmGlobal, ver);
+      // First try direct: v11/node_modules/reasonix/...
+      const direct = join(verDir, 'node_modules', 'reasonix', 'dist', 'cli', 'index.js');
       try {
-        if (statSync(candidate).isFile()) return { cmd: 'node', args: [candidate], shell: false };
-      } catch { /* not found in this store dir */ }
+        if (statSync(direct).isFile()) return { cmd: 'node', args: [direct], shell: false };
+      } catch { /* not here */ }
+      // Then try store hashes: v11/<hash>/node_modules/reasonix/...
+      try {
+        for (const hash of readdirSync(verDir)) {
+          const candidate = join(verDir, hash, 'node_modules', 'reasonix', 'dist', 'cli', 'index.js');
+          try {
+            if (statSync(candidate).isFile()) return { cmd: 'node', args: [candidate], shell: false };
+          } catch { /* not in this hash dir */ }
+        }
+      } catch { /* ver dir not readable */ }
     }
   } catch { /* pnpm global dir doesn't exist */ }
   // Fallback: let the system resolve `reasonix` via PATH (may break with shell:true)
