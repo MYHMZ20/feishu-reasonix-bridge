@@ -1,5 +1,5 @@
 import type { ChildProcessByStdio } from 'node:child_process';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -42,7 +42,6 @@ function resolveReasonixBinary(binary: string): { cmd: string; args: string[]; s
     }
   } catch { /* pnpm global dir doesn't exist */ }
   // Test each candidate with --version; return the first that works
-  const { execFileSync } = require('node:child_process');
   for (const entry of candidates) {
     try {
       execFileSync('node', [entry, '--version'], { stdio: 'ignore', timeout: 10_000 });
@@ -230,7 +229,15 @@ async function* createEventStream(
 
   const runtimeError = getError();
   if (exitCode !== 0 && exitCode !== null) {
-    const stderr = Buffer.concat(stderrChunks).toString('utf8').trim();
+    const raw = Buffer.concat(stderrChunks);
+    // On Windows, child process stderr may be in GBK (CP936), not UTF-8.
+    // Try UTF-8 first; if it contains replacement chars, try GBK via TextDecoder.
+    let stderr = raw.toString('utf8').trim();
+    if (stderr.includes('�')) {
+      try {
+        stderr = new TextDecoder('gbk').decode(raw).trim();
+      } catch { /* TextDecoder may not support GBK; keep the UTF-8 attempt */ }
+    }
     const detail = stderr ? `: ${stderr.slice(0, 500)}` : '';
     yield { type: 'error', message: `reasonix exited with code ${exitCode}${detail}` };
   } else if (runtimeError) {
