@@ -106,7 +106,7 @@ export async function handleCommentMention(deps: CommentDeps): Promise<void> {
   });
   const prompt = buildCommentPrompt(target, ctx);
 
-  // One Claude session per cloud-doc; subsequent @-mentions in the same
+  // One agent session per cloud-doc; subsequent @-mentions in the same
   // doc continue the same conversation. cwd defaults to $HOME — the agent
   // probably won't do filesystem work for doc replies but we keep a sane
   // default in case it does.
@@ -161,7 +161,7 @@ export async function handleCommentMention(deps: CommentDeps): Promise<void> {
     await run.stop();
 
     let reply = stripMarkdown(answer.trim());
-    if (errorMsg) reply = `⚠️ Claude 报错：${errorMsg}`;
+    if (errorMsg) reply = `⚠️ 代理报错：${errorMsg}`;
     if (!reply) reply = '（无回复内容）';
     if (reply.length > REPLY_MAX_CHARS) reply = `${reply.slice(0, REPLY_MAX_CHARS - 1)}…`;
 

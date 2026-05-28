@@ -10,8 +10,8 @@ import type { SessionStore } from '../session/store';
 import type { WorkspaceStore } from '../workspace/store';
 
 /** Marker key on a button's value object that flags the cardAction as
- * a callback that should be forwarded back to the agent (Claude) instead
- * of dispatched to a built-in command handler. The double-underscore
+ * a callback that should be forwarded back to the agent instead of
+ * dispatched to a built-in command handler. The double-underscore
  * sigils make it virtually impossible to collide with normal payload
  * fields the agent might set.
  */
@@ -71,7 +71,7 @@ export async function handleCardAction(deps: CardDispatchDeps): Promise<void> {
     return;
   }
 
-  // Claude-driven callback: the button was rendered by claude itself via
+  // Agent-driven callback: the button was rendered by the agent via
   // lark-cli, with `__claude_cb` set on the value. Forward the click back
   // into the scope's pending queue so claude resumes its session and sees
   // the click as a follow-up message, with full context of what it sent.
