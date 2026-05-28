@@ -68,14 +68,21 @@ feishu-reasonix-bridge status                查看服务状态
 | 命令 | 功能 |
 |---|---|
 | `/new`, `/reset` | 清除当前会话 |
-| `/cd <path>` | 切换工作目录 |
+| `/resume [N]` | 列出并恢复最近会话 |
+| `/cd <path>` | 切换工作目录（重置会话） |
 | `/ws list` | 列出命名工作空间 |
 | `/ws save <name>` | 保存当前目录为工作空间 |
 | `/ws use <name>` | 切换工作空间 |
-| `/status` | 查看当前状态 |
-| `/config` | 调整配置 |
+| `/ws remove <name>` | 删除命名工作空间 |
+| `/status` | 查看当前 cwd / 会话 / 代理 |
+| `/config` | 调整配置（回复模式、超时、访问控制等） |
 | `/stop` | 停止当前运行 |
-| `/timeout [N\|off]` | 设置空闲超时（分钟） |
+| `/timeout [N\|off\|default]` | 设置空闲超时；`off` 关闭；`default` 清除会话覆盖 |
+| `/ps` | 查看运行中的 bridge 进程 |
+| `/exit <id\|#>` | 终止 bridge 进程 |
+| `/account` | 查看/更换飞书应用凭据 |
+| `/reconnect` | 强制重连 WebSocket |
+| `/doctor [description]` | 将最近日志发给代理进行诊断 |
 | `/help` | 帮助卡片 |
 
 ## 配置

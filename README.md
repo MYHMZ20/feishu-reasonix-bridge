@@ -68,14 +68,21 @@ feishu-reasonix-bridge status                Show daemon status
 | Command | Effect |
 |---|---|
 | `/new`, `/reset` | Clear the current session |
-| `/cd <path>` | Switch working directory |
+| `/resume [N]` | List and resume recent sessions |
+| `/cd <path>` | Switch working directory (resets session) |
 | `/ws list` | List named workspaces |
 | `/ws save <name>` | Save current cwd as a workspace |
 | `/ws use <name>` | Switch to a workspace |
-| `/status` | Show current status |
-| `/config` | Adjust preferences |
+| `/ws remove <name>` | Delete a named workspace |
+| `/status` | Show current cwd / session / agent |
+| `/config` | Adjust preferences (reply mode, timeout, access control, ...) |
 | `/stop` | Stop the running agent |
-| `/timeout [N\|off]` | Set idle timeout (minutes) |
+| `/timeout [N\|off\|default]` | Set idle timeout (minutes); `off` disables; `default` clears session override |
+| `/ps` | List running bridge processes on this host |
+| `/exit <id\|#>` | Kill a bridge process |
+| `/account` | Show / change Feishu app credentials |
+| `/reconnect` | Force WebSocket reconnect |
+| `/doctor [description]` | Feed recent logs to the agent for self-diagnosis |
 | `/help` | Help card |
 
 ## Configuration
