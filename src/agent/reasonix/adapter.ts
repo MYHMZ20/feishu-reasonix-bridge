@@ -72,6 +72,7 @@ export class ReasonixAdapter implements AgentAdapter {
     this.binary = resolved.cmd;
     this.baseArgs = resolved.args;
     this.shell = resolved.shell;
+    console.log(`[reasonix-adapter] binary=${this.binary} args=${this.baseArgs.join(' ')} shell=${this.shell}`);
   }
 
   async isAvailable(): Promise<boolean> {
