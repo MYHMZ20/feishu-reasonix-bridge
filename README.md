@@ -2,6 +2,8 @@
 
 Run local **Reasonix** (DeepSeek) CLI from Feishu / Lark chat, with sessions, attachments, and background service support.
 
+> **Requires Reasonix source modification** — This bridge uses `reasonix code --output-format stream-json` for session persistence and tool support. The official Reasonix CLI does not yet support `--output-format` on the `code` command. You need to apply [this patch](https://github.com/esengine/DeepSeek-Reasonix/issues/2194) or build from [this fork](https://github.com/MYHMZ20/DeepSeek-Reasonix) (branch: `feat/code-stream-json`).
+
 > **Platform: Windows** — This project has been tested and optimized for Windows. Reasonix binary resolution handles both `pnpm` and `npm` global installs on Windows (parsing `.CMD` wrappers to avoid `cmd.exe` shell escaping issues). macOS/Linux may work but are not yet tested.
 
 This project is built with reference to [zarazhangrui/feishu-claude-code-bridge](https://github.com/zarazhangrui/feishu-claude-code-bridge), with thanks for the original design and implementation.

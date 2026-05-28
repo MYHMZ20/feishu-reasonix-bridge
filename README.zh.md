@@ -2,6 +2,8 @@
 
 在飞书/Lark 聊天中运行本地 **Reasonix**（DeepSeek）CLI，支持会话、附件和后台服务。
 
+> **需要修改 Reasonix 源码** — 本桥接使用 `reasonix code --output-format stream-json` 实现会话持久化和工具调用。官方 Reasonix CLI 尚未支持 `code` 命令的 `--output-format` 选项。需要应用[此补丁](https://github.com/esengine/DeepSeek-Reasonix/issues/2194)或从[此 fork](https://github.com/MYHMZ20/DeepSeek-Reasonix) 构建（分支：`feat/code-stream-json`）。
+
 > **平台：Windows** — 本项目在 Windows 上测试和优化。Reasonix 二进制解析支持 `pnpm` 和 `npm` 全局安装（解析 `.CMD` 包装器以避免 `cmd.exe` shell 转义问题）。macOS/Linux 理论可用但未测试。
 
 本项目参考 [zarazhangrui/feishu-claude-code-bridge](https://github.com/zarazhangrui/feishu-claude-code-bridge) 构建，感谢原项目的设计与实现。
