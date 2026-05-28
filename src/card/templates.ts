@@ -9,7 +9,7 @@ function button(spec: ButtonSpec): object {
     tag: 'button',
     text: { tag: 'plain_text', content: spec.text },
     type: spec.style ?? 'default',
-    value: spec.value,
+    value: JSON.stringify(spec.value),
   };
 }
 

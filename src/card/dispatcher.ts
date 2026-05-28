@@ -30,9 +30,12 @@ export interface CardDispatchDeps {
 }
 
 export async function handleCardAction(deps: CardDispatchDeps): Promise<void> {
-  const value = deps.evt.action.value;
-  if (!value || typeof value !== 'object') return;
-  const payload = value as Record<string, unknown>;
+  const rawValue = deps.evt.action.value;
+  if (!rawValue) return;
+  // Value may be a JSON string (CardKit v1) or an object (v2).
+  const payload: Record<string, unknown> =
+    typeof rawValue === 'string' ? JSON.parse(rawValue) : (rawValue as Record<string, unknown>);
+  if (!payload || typeof payload !== 'object') return;
 
   const operatorId = deps.evt.operator.openId;
   const chatId = deps.evt.chatId;
