@@ -1,33 +1,30 @@
-# lark-channel-bridge
+# feishu-reasonix-bridge
 
-A lightweight bot that bridges Feishu / Lark messenger with your local Claude Code CLI. Run one command, scan a QR code to bind a Lark app, and talk to Claude from chat — read screenshots, edit code, anything you'd do at the terminal.
+A lightweight bot that bridges Feishu / Lark messenger with your local **Reasonix** (DeepSeek) CLI agent. Based on [feishu-claude-code-bridge](https://github.com/zarazhangrui/feishu-claude-code-bridge) by [@zarazhangrui](https://github.com/zarazhangrui).
 
-[中文 README](./README.zh.md)
-
-关于能实现的效果，详情可以阅读[飞书文档](https://larkcommunity.feishu.cn/docx/OaRIdFIRFoLM3xxTmKwcetHqn5e)
+> This fork adds multi-agent support with a `ReasonixAdapter`, enabling DeepSeek-Reasonix as a bridge backend alongside the original Claude Code adapter.
 
 ## What it does
 
-- Forwards Feishu / Lark messages (DM directly, or `@bot` in a group) to your local `claude` CLI, running in a working directory you control.
-- **Streaming card**: Claude's text and tool calls update on a single Lark card in real time — no waiting for the final reply.
-- **Per-chat sessions**: each chat keeps its own Claude session, so conversations resume where they left off.
+- Forwards Feishu / Lark messages (DM directly, or `@bot` in a group) to your local `reasonix` CLI, running in a working directory you control.
+- **Streaming reply**: Reasonix's text output updates in real time on a Lark card.
+- **Multi-agent routing**: configure `agentRoutes` in config to route different chats to different agents (Claude / Reasonix).
+- **Per-chat sessions**: each chat keeps its own session, so conversations resume where they left off.
 - **Preempt + batch**: a new message interrupts the running run; rapid-fire messages get coalesced into one request.
 - **Multiple workspaces**: `/ws` switches between named project directories, with sessions tracked per workspace.
-- **Images and files**: send them to the bot directly — Claude reads the locally downloaded paths.
-- **Interactive cards**: `/help`, `/ws list`, `/status` return cards with buttons you can click.
 
 ## Prerequisites
 
 - Node.js **>= 20**
-- `claude` CLI installed and logged in — see https://docs.anthropic.com/en/docs/claude-code/quickstart
+- `reasonix` CLI installed — see https://github.com/esengine/DeepSeek-Reasonix
 - A Lark / Feishu **PersonalAgent** app (the QR-code wizard on first launch can create one for you).
 
 ## Install
 
 ```bash
-npm i -g lark-channel-bridge
+npm i -g feishu-reasonix-bridge
 # or
-pnpm add -g lark-channel-bridge
+pnpm add -g feishu-reasonix-bridge
 ```
 
 ## First run

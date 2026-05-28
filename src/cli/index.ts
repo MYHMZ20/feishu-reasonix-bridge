@@ -20,8 +20,8 @@ import { runStart } from './commands/start';
 const program = new Command();
 
 program
-  .name('lark-channel-bridge')
-  .description('Bridge Feishu/Lark messenger with local CLI coding agents')
+  .name('feishu-reasonix-bridge')
+  .description('Bridge Feishu/Lark messenger with Reasonix (DeepSeek) CLI agent')
   .version(pkg.version, '-v, --version');
 
 // === process-level commands (work directly on bridge processes) ===

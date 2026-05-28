@@ -1,10 +1,10 @@
 {
-  "name": "lark-channel-bridge",
-  "version": "0.1.32",
-  "description": "Bridge Feishu/Lark messenger with local CLI coding agents (Claude Code, Reasonix, ...)",
+  "name": "feishu-reasonix-bridge",
+  "version": "0.1.0",
+  "description": "Bridge Feishu/Lark messenger with Reasonix (DeepSeek) CLI agent. Based on feishu-claude-code-bridge.",
   "type": "module",
   "bin": {
-    "lark-channel-bridge": "./bin/lark-channel-bridge.mjs"
+    "feishu-reasonix-bridge": "./bin/lark-channel-bridge.mjs"
   },
   "exports": {
     ".": {
@@ -52,13 +52,11 @@
   "keywords": [
     "feishu",
     "lark",
-    "claude",
-    "claude-code",
     "reasonix",
     "deepseek",
+    "bridge",
     "cli",
-    "channel",
-    "bridge"
+    "typescript"
   ],
   "license": "MIT"
 }
