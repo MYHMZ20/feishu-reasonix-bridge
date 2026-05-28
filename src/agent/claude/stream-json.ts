@@ -1,6 +1,6 @@
 import type { AgentEvent } from '../types';
 
-interface ContentBlock {
+interface ClaudeContentBlock {
   type: string;
   text?: string;
   thinking?: string;
@@ -18,12 +18,12 @@ interface ClaudeRawEvent {
   session_id?: string;
   cwd?: string;
   model?: string;
-  message?: { content?: ContentBlock[] };
+  message?: { content?: ClaudeContentBlock[] };
   usage?: { input_tokens?: number; output_tokens?: number };
   total_cost_usd?: number;
 }
 
-export function* translateEvent(raw: unknown): Generator<AgentEvent> {
+export function* translateClaudeEvent(raw: unknown): Generator<AgentEvent> {
   if (!raw || typeof raw !== 'object') return;
   const evt = raw as ClaudeRawEvent;
 

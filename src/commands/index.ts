@@ -1,7 +1,7 @@
 import { stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import type { LarkChannel, NormalizedMessage } from '@larksuiteoapi/node-sdk';
-import type { AgentAdapter } from '../agent/types';
+import type { AgentRouter } from '../agent/types';
 import type { ActiveRuns } from '../bot/active-runs';
 import {
   accountCurrentCard,
@@ -73,7 +73,7 @@ export interface CommandContext {
   chatMode: 'p2p' | 'group' | 'topic';
   sessions: SessionStore;
   workspaces: WorkspaceStore;
-  agent: AgentAdapter;
+  resolveAgent: AgentRouter;
   activeRuns: ActiveRuns;
   controls: Controls;
   /** Set when invoked from a CardKit 2.0 form submit. Keys are input `name`s. */
@@ -387,7 +387,7 @@ async function handleStatus(_args: string, ctx: CommandContext): Promise<void> {
     cwd,
     sessionId: sess?.sessionId,
     sessionStale: Boolean(sess && sess.cwd !== cwd),
-    agentName: ctx.agent.displayName,
+    agentName: ctx.resolveAgent(ctx.scope).displayName,
     scope: ctx.scope,
     chatMode: ctx.chatMode,
   });
@@ -622,7 +622,7 @@ async function handleDoctor(args: string, ctx: CommandContext): Promise<void> {
   }
 
   const prompt = buildDoctorPrompt(args, logs);
-  const run = ctx.agent.run({
+  const run = ctx.resolveAgent(ctx.scope).run({
     prompt,
     cwd: homedir(),
     stopGraceMs: getAgentStopGraceMs(ctx.controls.cfg),

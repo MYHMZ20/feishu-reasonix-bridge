@@ -1,16 +1,23 @@
 import type { ChildProcessByStdio } from 'node:child_process';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
+import { join } from 'node:path';
 import type { Readable } from 'node:stream';
 import { log } from '../../core/logger';
 import type { AgentAdapter, AgentEvent, AgentRun, AgentRunOptions } from '../types';
-import { translateEvent } from './stream-json';
+import { translateClaudeEvent } from './stream-json';
 
 export interface ClaudeAdapterOptions {
   binary?: string;
 }
 
 type ClaudeChild = ChildProcessByStdio<null, Readable, Readable>;
+
+interface StdoutBuffer {
+  lines: string[];
+  ended: boolean;
+  waiter: (() => void) | null;
+}
 
 const BRIDGE_SYSTEM_PROMPT = `# lark-channel-bridge 运行约定
 
@@ -101,6 +108,15 @@ sender_name: ...
 5. 如果用户中途想取消，他们会发 \`/stop\`——那时被 kill 是预期行为，不用兜底。
 `;
 
+function resolveClaudeBinary(binary: string): string {
+  if (process.platform !== 'win32' || binary !== 'claude') return binary;
+  // npm global install puts the real .exe under node_modules.
+  // Spawning the .exe directly avoids cmd.exe argument-escaping bugs
+  // that break long --append-system-prompt strings.
+  const appData = process.env.APPDATA ?? join(process.env.HOME ?? '', 'AppData', 'Roaming');
+  return join(appData, 'npm', 'node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe');
+}
+
 export class ClaudeAdapter implements AgentAdapter {
   readonly id = 'claude';
   readonly displayName = 'Claude Code';
@@ -108,7 +124,7 @@ export class ClaudeAdapter implements AgentAdapter {
   private readonly binary: string;
 
   constructor(opts: ClaudeAdapterOptions = {}) {
-    this.binary = opts.binary ?? 'claude';
+    this.binary = resolveClaudeBinary(opts.binary ?? 'claude');
   }
 
   async isAvailable(): Promise<boolean> {
@@ -181,8 +197,23 @@ export class ClaudeAdapter implements AgentAdapter {
     // a value derived from preferences.
     const stopGraceMs = opts.stopGraceMs ?? 5000;
 
+    // Attach stdout readline synchronously — same discipline as stderr/error/exit.
+    // If deferred to the async generator body, a short-lived `claude -p` may exit
+    // before the first consumer iterates; Node's readline won't replay buffered
+    // lines or fire 'close' after EOF, hanging the generator and the entire chat.
+    const stdoutBuffer: StdoutBuffer = { lines: [], ended: false, waiter: null };
+    const rl = createInterface({ input: child.stdout, crlfDelay: Infinity });
+    rl.on('line', (line: string) => {
+      stdoutBuffer.lines.push(line);
+      stdoutBuffer.waiter?.();
+    });
+    rl.on('close', () => {
+      stdoutBuffer.ended = true;
+      stdoutBuffer.waiter?.();
+    });
+
     return {
-      events: createEventStream(child, stderrChunks, () => runtimeError),
+      events: createEventStream(child, stderrChunks, () => runtimeError, stdoutBuffer),
       async stop() {
         if (child.exitCode !== null || child.signalCode !== null) return;
         log.info('agent', 'stop-sigterm', { pid: child.pid ?? null, graceMs: stopGraceMs });
@@ -229,6 +260,7 @@ async function* createEventStream(
   child: ClaudeChild,
   stderrChunks: Buffer[],
   getError: () => Error | null,
+  buf: StdoutBuffer,
 ): AsyncGenerator<AgentEvent> {
   // If fork itself failed synchronously, child.pid is undefined. The 'error'
   // event (ENOENT etc.) fires in the next tick, so also check getError().
@@ -241,9 +273,13 @@ async function* createEventStream(
     return;
   }
 
-  const rl = createInterface({ input: child.stdout, crlfDelay: Infinity });
-  try {
-    for await (const line of rl) {
+  // Pull from the pre-attached stdout buffer instead of creating a readline
+  // lazily. The readline was attached synchronously in run(), so by the time
+  // the first consumer arrives, lines from an already-exited claude are
+  // safely buffered.
+  while (true) {
+    while (buf.lines.length > 0) {
+      const line = buf.lines.shift()!;
       const trimmed = line.trim();
       if (!trimmed) continue;
       let parsed: unknown;
@@ -252,10 +288,11 @@ async function* createEventStream(
       } catch {
         continue;
       }
-      yield* translateEvent(parsed);
+      yield* translateClaudeEvent(parsed);
     }
-  } finally {
-    rl.close();
+    if (buf.ended) break;
+    await new Promise<void>((resolve) => { buf.waiter = resolve; });
+    buf.waiter = null;
   }
 
   // When the child is killed by a signal, exitCode stays null and signalCode

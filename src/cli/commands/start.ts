@@ -2,6 +2,8 @@ import dns from 'node:dns';
 import { createInterface } from 'node:readline';
 import pkg from '../../../package.json';
 import { ClaudeAdapter } from '../../agent/claude/adapter';
+import { ReasonixAdapter } from '../../agent/reasonix/adapter';
+import type { AgentAdapter, AgentRouter } from '../../agent/types';
 import { startChannel, type BridgeChannel } from '../../bot/channel';
 import { runRegistrationWizard } from '../../bot/wizard';
 import type { Controls } from '../../commands';
@@ -76,12 +78,27 @@ export async function runStart(opts: StartOptions): Promise<void> {
 
   await preFlightChecks({ skipCheckLarkCli: opts.skipCheckLarkCli });
 
-  const agent = new ClaudeAdapter();
-  if (!(await agent.isAvailable())) {
-    console.error('✗ 未找到 claude CLI。请先安装 Claude Code：');
-    console.error('  https://docs.anthropic.com/en/docs/claude-code/quickstart');
+  const claude = new ClaudeAdapter();
+  const reasonix = new ReasonixAdapter();
+  const adapters = new Map<string, AgentAdapter>([
+    ['claude', claude],
+    ['reasonix', reasonix],
+  ]);
+  // Check at least the default agent is available
+  const defaultAgentId = cfg.preferences?.defaultAgent ?? 'claude';
+  const defaultAdapter = adapters.get(defaultAgentId) ?? claude;
+  if (!(await defaultAdapter.isAvailable())) {
+    console.error(`✗ 未找到 ${defaultAdapter.displayName} CLI。`);
+    if (defaultAgentId === 'claude') {
+      console.error('  https://docs.anthropic.com/en/docs/claude-code/quickstart');
+    }
     process.exit(1);
   }
+  const resolveAgent: AgentRouter = (scope: string): AgentAdapter => {
+    const route = cfg.preferences?.agentRoutes?.[scope];
+    const id = route ?? cfg.preferences?.defaultAgent ?? 'claude';
+    return adapters.get(id) ?? claude;
+  };
 
   const sessions = new SessionStore();
   await sessions.load();
@@ -160,7 +177,7 @@ export async function runStart(opts: StartOptions): Promise<void> {
         // someone manually restarts it.
         const next_bridge = await startChannel({
           cfg: next,
-          agent,
+          resolveAgent,
           sessions,
           workspaces,
           controls,
@@ -190,7 +207,7 @@ export async function runStart(opts: StartOptions): Promise<void> {
     },
   };
 
-  bridge = await startChannel({ cfg, agent, sessions, workspaces, controls });
+  bridge = await startChannel({ cfg, resolveAgent, sessions, workspaces, controls });
 
   // Backfill the bot's display name into the registry once WS handshake is
   // done — future starts conflicting on this app can show it in the prompt

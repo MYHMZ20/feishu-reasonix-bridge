@@ -1,5 +1,5 @@
 import type { CardActionEvent, LarkChannel, NormalizedMessage } from '@larksuiteoapi/node-sdk';
-import type { AgentAdapter } from '../agent/types';
+import type { AgentRouter } from '../agent/types';
 import type { ActiveRuns } from '../bot/active-runs';
 import type { ChatModeCache } from '../bot/chat-mode-cache';
 import type { PendingQueue } from '../bot/pending-queue';
@@ -23,7 +23,7 @@ export interface CardDispatchDeps {
   sessions: SessionStore;
   workspaces: WorkspaceStore;
   activeRuns: ActiveRuns;
-  agent: AgentAdapter;
+  resolveAgent: AgentRouter;
   controls: Controls;
   pending: PendingQueue;
   chatModeCache: ChatModeCache;
@@ -92,7 +92,7 @@ export async function handleCardAction(deps: CardDispatchDeps): Promise<void> {
     sessions: deps.sessions,
     workspaces: deps.workspaces,
     activeRuns: deps.activeRuns,
-    agent: deps.agent,
+    resolveAgent: deps.resolveAgent,
     controls: deps.controls,
     formValue,
     fromCardAction: true,

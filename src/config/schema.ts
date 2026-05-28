@@ -141,6 +141,14 @@ export interface AppPreferences {
    * Range 100-30000; out-of-range values fall back to default.
    */
   agentStopGraceMs?: number;
+  /**
+   * Per-scope agent routing. Keys are chat_id (or "chat_id:thread_id" for
+   * topic groups), values are agent id ("claude", "reasonix", etc.).
+   * Unscoped chats fall back to `defaultAgent`.
+   */
+  agentRoutes?: Record<string, string>;
+  /** Default agent id when no route matches. Default "claude". */
+  defaultAgent?: string;
 }
 
 /**

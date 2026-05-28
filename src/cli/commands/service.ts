@@ -1,4 +1,3 @@
-import { ClaudeAdapter } from '../../agent/claude/adapter';
 import { isComplete } from '../../config/schema';
 import { loadConfig } from '../../config/store';
 import { daemonStderrPath, daemonStdoutPath } from '../../daemon/paths';
@@ -138,10 +137,9 @@ async function reportConnectAfter(
 
   const entry = await waitForServiceConnect(appId, beforePids);
   if (entry) {
-    const agent = new ClaudeAdapter();
     const verbZh = verb === 'started' ? '已启动' : '已重启';
     console.log(
-      `✓ ${verbZh}  bot: ${entry.botName} (${entry.appId})  agent: ${agent.displayName} (${agent.id})  进程: ${entry.id}`,
+      `✓ ${verbZh}  bot: ${entry.botName} (${entry.appId})  进程: ${entry.id}`,
     );
     return;
   }

@@ -5,7 +5,7 @@ import type {
   NormalizedMessage,
 } from '@larksuiteoapi/node-sdk';
 import { Domain, LoggerLevel, createLarkChannel } from '@larksuiteoapi/node-sdk';
-import type { AgentAdapter } from '../agent/types';
+import type { AgentRouter } from '../agent/types';
 import { handleCardAction } from '../card/dispatcher';
 import { renderCard } from '../card/run-renderer';
 import {
@@ -111,14 +111,14 @@ export interface BridgeChannel {
 
 export interface StartChannelDeps {
   cfg: AppConfig;
-  agent: AgentAdapter;
+  resolveAgent: AgentRouter;
   sessions: SessionStore;
   workspaces: WorkspaceStore;
   controls: Controls;
 }
 
 export async function startChannel(deps: StartChannelDeps): Promise<BridgeChannel> {
-  const { cfg, agent, sessions, workspaces, controls } = deps;
+  const { cfg, resolveAgent, sessions, workspaces, controls } = deps;
   const activeRuns = new ActiveRuns();
   // ChatModeCache stays per-bridge-instance — invalidated on restart along
   // with everything else. Topic-mode chats only need one chat.get() call ever.
@@ -193,7 +193,7 @@ export async function startChannel(deps: StartChannelDeps): Promise<BridgeChanne
         const mode = await chatModeCache.resolve(channel, firstMsg.chatId);
         await runAgentBatch({
           channel,
-          agent,
+          resolveAgent,
           sessions,
           workspaces,
           activeRuns,
@@ -221,7 +221,7 @@ export async function startChannel(deps: StartChannelDeps): Promise<BridgeChanne
       await withTrace({ chatId: msg.chatId, msgId: msg.messageId }, () =>
         intakeMessage({
           channel,
-          agent,
+          resolveAgent,
           sessions,
           workspaces,
           activeRuns,
@@ -243,7 +243,7 @@ export async function startChannel(deps: StartChannelDeps): Promise<BridgeChanne
           sessions,
           workspaces,
           activeRuns,
-          agent,
+          resolveAgent,
           controls,
           pending,
           chatModeCache,
@@ -252,7 +252,7 @@ export async function startChannel(deps: StartChannelDeps): Promise<BridgeChanne
     },
     comment: async (evt) => {
       await withTrace({ chatId: 'comment' }, async () => {
-        await handleCommentMention({ channel, evt, agent, sessions, workspaces }).catch((err) =>
+        await handleCommentMention({ channel, evt, resolveAgent, sessions, workspaces }).catch((err) =>
           log.fail('comment', err),
         );
       }).catch((err) => log.fail('comment', err));
@@ -297,7 +297,7 @@ export async function startChannel(deps: StartChannelDeps): Promise<BridgeChanne
   log.info('ws', 'connected', {
     bot: identity?.name ?? 'unknown',
     openId: identity?.openId ?? '-',
-    agent: `${agent.displayName} (${agent.id})`,
+    agent: 'multi',
     appId: cfg.accounts.app.id,
     procId: controls.processId,
   });
@@ -330,7 +330,7 @@ export async function startChannel(deps: StartChannelDeps): Promise<BridgeChanne
 
 interface IntakeDeps {
   channel: LarkChannel;
-  agent: AgentAdapter;
+  resolveAgent: AgentRouter;
   sessions: SessionStore;
   workspaces: WorkspaceStore;
   activeRuns: ActiveRuns;
@@ -343,7 +343,7 @@ interface IntakeDeps {
 async function intakeMessage(deps: IntakeDeps): Promise<void> {
   const {
     channel,
-    agent,
+    resolveAgent,
     sessions,
     workspaces,
     activeRuns,
@@ -413,7 +413,7 @@ async function intakeMessage(deps: IntakeDeps): Promise<void> {
     chatMode,
     sessions,
     workspaces,
-    agent,
+    resolveAgent,
     activeRuns,
     controls,
   });
@@ -429,7 +429,7 @@ async function intakeMessage(deps: IntakeDeps): Promise<void> {
 
 interface RunBatchDeps {
   channel: LarkChannel;
-  agent: AgentAdapter;
+  resolveAgent: AgentRouter;
   sessions: SessionStore;
   workspaces: WorkspaceStore;
   activeRuns: ActiveRuns;
@@ -443,7 +443,7 @@ interface RunBatchDeps {
 async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
   const {
     channel,
-    agent,
+    resolveAgent,
     sessions,
     workspaces,
     activeRuns,
@@ -510,6 +510,7 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
     }
   }
 
+  const agent = resolveAgent(scope);
   const run = agent.run({
     prompt,
     sessionId: resumeFrom,
@@ -549,7 +550,7 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
     ...(mode === 'topic' && threadId ? { replyInThread: true } : {}),
   };
 
-  // For non-card modes Claude's output doesn't surface visually until either
+  // For non-card modes the agent's output doesn't surface visually until either
   // a first streamed token (markdown mode) or the whole run ends (text mode).
   // Add a "Typing" reaction to the triggering message as an instant ack;
   // remove it in finally. Card mode has a visible "正在思考…" footer the
@@ -623,13 +624,13 @@ async function processAgentStream(
 ): Promise<void> {
   let state: RunState = initialState;
 
-  // Idle watchdog: claude going silent for `idleTimeoutMs` is treated as
+  // Idle watchdog: agent going silent for `idleTimeoutMs` is treated as
   // "presumed hung", we stop() and surface a timeout marker on the card.
   //
-  // BUT — claude can legitimately be silent for a long time when it's
+  // BUT — the agent can legitimately be silent for a long time when it's
   // waiting on a long-running tool call (e.g. `lark-cli` printing an
   // OAuth URL and blocking until the user clicks authorize). In that
-  // case there's no event stream activity from claude itself, only the
+  // case there's no event stream activity from the agent itself, only the
   // tool subprocess running. We track which tool_use ids haven't matched
   // a tool_result yet, and pause the watchdog whenever the set is
   // non-empty.
@@ -697,7 +698,7 @@ async function processAgentStream(
         log.info('card', 'transition', { footer: state.footer, terminal: state.terminal });
       }
       await flush(state);
-      // Stop iterating as soon as we have a terminal state. Some claude
+      // Stop iterating as soon as we have a terminal state. Some agents
       // versions don't close stdout immediately after the result event, which
       // would leave the for-await waiting forever otherwise.
       if (state.terminal !== 'running') break;
@@ -708,7 +709,7 @@ async function processAgentStream(
 
   // If state already reached a terminal event (done/error/etc.) before the
   // watchdog or interrupt could land, don't clobber it — that real terminal
-  // wins. This avoids "claude finished but flush was slow → timer fired
+  // wins. This avoids "agent finished but flush was slow → timer fired
   // mid-flush → user sees 'idle_timeout' on a successful run".
   if (state.terminal === 'running') {
     if (idleFired) {
@@ -724,7 +725,7 @@ async function processAgentStream(
     // Reap the subprocess. Two regimes:
   //  - Interrupted (user /stop, idle watchdog, disconnect): stop() was already
   //    fire-and-forgotten by whoever set handle.interrupted; this awaits it.
-  //  - Natural done: stream-json emits `result` ~1ms before claude actually
+  //  - Natural done: stream-json emits `result` ~1ms before the agent actually
   //    closes stdout (telemetry flush). Wait it out so the run exits with
   //    code 0; only SIGTERM as a hung-process safety net.
   if (handle.interrupted) {
@@ -739,8 +740,8 @@ async function processAgentStream(
 }
 
 /**
- * How long to wait for claude to close stdout after a terminal event before
- * forcing a SIGTERM. Empirically claude's post-`result` tail is well under a
+ * How long to wait for the agent to close stdout after a terminal event before
+ * forcing a SIGTERM. Empirically the agent's post-`result` tail is well under a
  * second; 2s leaves headroom for slow flushes without making the user notice
  * a stall (the card has already rendered terminal state by this point).
  */

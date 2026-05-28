@@ -1,0 +1,225 @@
+import type { ChildProcessByStdio } from 'node:child_process';
+import { spawn } from 'node:child_process';
+import { readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { createInterface } from 'node:readline';
+import type { Readable } from 'node:stream';
+import { log } from '../../core/logger';
+import type { AgentAdapter, AgentEvent, AgentRun, AgentRunOptions } from '../types';
+import { translateReasonixEvent } from './stream-json';
+
+export interface ReasonixAdapterOptions {
+  binary?: string;
+}
+
+type ReasonixChild = ChildProcessByStdio<null, Readable, Readable>;
+
+interface StdoutBuffer {
+  lines: string[];
+  ended: boolean;
+  waiter: (() => void) | null;
+}
+
+function resolveReasonixBinary(binary: string): { cmd: string; args: string[]; shell: boolean } {
+  if (process.platform !== 'win32' || binary !== 'reasonix') return { cmd: binary, args: [], shell: false };
+  // pnpm installs a .CMD wrapper that breaks with shell:true + special chars in prompt.
+  // Instead, invoke node directly with the entry-point .js file.
+  const localAppData = process.env.LOCALAPPDATA ?? join(process.env.HOME ?? '', 'AppData', 'Local');
+  const pnpmGlobal = join(localAppData, 'pnpm', 'global');
+  // Find the first store directory that contains reasonix
+  try {
+    for (const ver of readdirSync(pnpmGlobal)) {
+      const candidate = join(pnpmGlobal, ver, 'node_modules', 'reasonix', 'dist', 'cli', 'index.js');
+      try {
+        if (statSync(candidate).isFile()) return { cmd: 'node', args: [candidate], shell: false };
+      } catch { /* not found in this store dir */ }
+    }
+  } catch { /* pnpm global dir doesn't exist */ }
+  // Fallback: let the system resolve `reasonix` via PATH (may break with shell:true)
+  return { cmd: binary, args: [], shell: true };
+}
+
+export class ReasonixAdapter implements AgentAdapter {
+  readonly id = 'reasonix';
+  readonly displayName = 'Reasonix';
+
+  private readonly binary: string;
+  private readonly baseArgs: string[];
+  private readonly shell: boolean;
+
+  constructor(opts: ReasonixAdapterOptions = {}) {
+    const resolved = resolveReasonixBinary(opts.binary ?? 'reasonix');
+    this.binary = resolved.cmd;
+    this.baseArgs = resolved.args;
+    this.shell = resolved.shell;
+  }
+
+  async isAvailable(): Promise<boolean> {
+    return new Promise((resolve) => {
+      const child = spawn(this.binary, [...this.baseArgs, '--version'], { stdio: 'ignore', shell: this.shell });
+      child.on('error', () => resolve(false));
+      child.on('exit', (code) => resolve(code === 0));
+    });
+  }
+
+  run(opts: AgentRunOptions): AgentRun {
+    const args = [
+      ...this.baseArgs,
+      'run',
+      opts.prompt,
+      '--output-format',
+      'stream-json',
+    ];
+    if (opts.model) args.push('--model', opts.model);
+
+    const child = spawn(this.binary, args, {
+      cwd: opts.cwd,
+      env: { ...process.env, LARK_CHANNEL: '1' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell: this.shell,
+    });
+
+    log.info('reasonix', 'spawn', {
+      pid: child.pid ?? null,
+      cwd: opts.cwd ?? process.cwd(),
+      promptChars: opts.prompt.length,
+      model: opts.model,
+    });
+
+    // Collect stderr for diagnostics
+    const stderrChunks: Buffer[] = [];
+    let stderrBuffer = '';
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderrChunks.push(chunk);
+      stderrBuffer += chunk.toString('utf8');
+      let nl = stderrBuffer.indexOf('\n');
+      while (nl !== -1) {
+        const line = stderrBuffer.slice(0, nl);
+        stderrBuffer = stderrBuffer.slice(nl + 1);
+        if (line.trim()) {
+          log.warn('reasonix', 'stderr', { line });
+        }
+        nl = stderrBuffer.indexOf('\n');
+      }
+    });
+
+    let runtimeError: Error | null = null;
+    child.on('error', (err) => {
+      runtimeError = err;
+    });
+    child.on('exit', (code, signal) => {
+      log.info('reasonix', 'exit', { pid: child.pid ?? null, code, signal });
+    });
+
+    const stopGraceMs = opts.stopGraceMs ?? 5000;
+
+    // Attach stdout readline synchronously
+    const stdoutBuffer: StdoutBuffer = { lines: [], ended: false, waiter: null };
+    const rl = createInterface({ input: child.stdout, crlfDelay: Infinity });
+    rl.on('line', (line: string) => {
+      stdoutBuffer.lines.push(line);
+      stdoutBuffer.waiter?.();
+    });
+    rl.on('close', () => {
+      stdoutBuffer.ended = true;
+      stdoutBuffer.waiter?.();
+    });
+
+    return {
+      events: createEventStream(child, stderrChunks, () => runtimeError, stdoutBuffer),
+      async stop() {
+        if (child.exitCode !== null || child.signalCode !== null) return;
+        log.info('reasonix', 'stop-sigterm', { pid: child.pid ?? null, graceMs: stopGraceMs });
+        child.kill('SIGTERM');
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(() => {
+            if (child.exitCode === null && child.signalCode === null) {
+              log.warn('reasonix', 'stop-sigkill', {
+                pid: child.pid ?? null,
+                graceMs: stopGraceMs,
+                reason: 'grace-period-expired',
+              });
+              child.kill('SIGKILL');
+            }
+            resolve();
+          }, stopGraceMs);
+          child.once('exit', () => {
+            clearTimeout(timer);
+            resolve();
+          });
+        });
+      },
+      waitForExit(timeoutMs: number): Promise<boolean> {
+        if (child.exitCode !== null || child.signalCode !== null) {
+          return Promise.resolve(true);
+        }
+        return new Promise<boolean>((resolve) => {
+          const onExit = (): void => {
+            clearTimeout(timer);
+            resolve(true);
+          };
+          const timer = setTimeout(() => {
+            child.removeListener('exit', onExit);
+            resolve(false);
+          }, timeoutMs);
+          child.once('exit', onExit);
+        });
+      },
+    };
+  }
+}
+
+async function* createEventStream(
+  child: ReasonixChild,
+  stderrChunks: Buffer[],
+  getError: () => Error | null,
+  buf: StdoutBuffer,
+): AsyncGenerator<AgentEvent> {
+  if (!child.pid) {
+    const err = getError();
+    yield {
+      type: 'error',
+      message: err ? `failed to spawn reasonix: ${err.message}` : 'spawn returned no pid',
+    };
+    return;
+  }
+
+  // Emit a system event so bridge knows this is a reasonix run
+  yield { type: 'system', model: 'reasonix' };
+
+  while (true) {
+    while (buf.lines.length > 0) {
+      const line = buf.lines.shift()!;
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch {
+        // Non-JSON line (e.g. MCP lifecycle banner on stderr mixed to stdout) — skip
+        continue;
+      }
+      yield* translateReasonixEvent(parsed);
+    }
+    if (buf.ended) break;
+    await new Promise<void>((resolve) => { buf.waiter = resolve; });
+    buf.waiter = null;
+  }
+
+  const exitCode = await new Promise<number | null>((resolve) => {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      resolve(child.exitCode);
+    } else {
+      child.once('exit', (code) => resolve(code));
+    }
+  });
+
+  const runtimeError = getError();
+  if (exitCode !== 0 && exitCode !== null) {
+    const stderr = Buffer.concat(stderrChunks).toString('utf8').trim();
+    const detail = stderr ? `: ${stderr.slice(0, 500)}` : '';
+    yield { type: 'error', message: `reasonix exited with code ${exitCode}${detail}` };
+  } else if (runtimeError) {
+    yield { type: 'error', message: `reasonix runtime error: ${runtimeError.message}` };
+  }
+}

@@ -47,3 +47,6 @@ export interface AgentAdapter {
   isAvailable(): Promise<boolean>;
   run(opts: AgentRunOptions): AgentRun;
 }
+
+/** Resolves which AgentAdapter to use for a given chat scope. */
+export type AgentRouter = (scope: string) => AgentAdapter;
