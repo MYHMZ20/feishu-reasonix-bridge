@@ -1,7 +1,7 @@
 import type { ChildProcessByStdio } from 'node:child_process';
-import { spawn, execFileSync } from 'node:child_process';
-import { readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { execFileSync, spawn } from 'node:child_process';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import type { Readable } from 'node:stream';
 import { log } from '../../core/logger';
@@ -23,32 +23,39 @@ interface StdoutBuffer {
 function resolveReasonixBinary(binary: string): { cmd: string; args: string[]; shell: boolean } {
   if (process.platform !== 'win32' || binary !== 'reasonix') return { cmd: binary, args: [], shell: false };
   // pnpm installs a .CMD wrapper that breaks with shell:true + special chars in prompt.
-  // Instead, invoke node directly with the entry-point .js file.
+  // Parse the wrapper to extract the real .js entry point, then invoke node directly.
+  const pnpmBin = join(process.env.LOCALAPPDATA ?? join(process.env.HOME ?? '', 'AppData', 'Local'), 'pnpm', 'bin');
+  const cmdFile = join(pnpmBin, 'reasonix.CMD');
+  try {
+    const content = readFileSync(cmdFile, 'utf-8');
+    // CMD file contains lines like: node  "%~dp0\..\global\v11\...\reasonix\dist\cli\index.js" %*
+    const match = content.match(/node\s+"([^"]+\.js)"/i);
+    if (match?.[1]) {
+      // %~dp0 resolves to the CMD file's directory (with trailing backslash)
+      const entryPath = match[1].replace(/%~dp0[\\\/]?/gi, pnpmBin + '\\');
+      const abs = resolve(entryPath);
+      try {
+        if (statSync(abs).isFile()) return { cmd: 'node', args: [abs], shell: false };
+      } catch { /* file doesn't exist at resolved path */ }
+    }
+  } catch { /* CMD file not found */ }
+  // Fallback: search pnpm global store directories
   const localAppData = process.env.LOCALAPPDATA ?? join(process.env.HOME ?? '', 'AppData', 'Local');
   const pnpmGlobal = join(localAppData, 'pnpm', 'global');
-  // Collect all candidate entry points
-  const candidates: string[] = [];
   try {
     for (const ver of readdirSync(pnpmGlobal)) {
       const verDir = join(pnpmGlobal, ver);
       const direct = join(verDir, 'node_modules', 'reasonix', 'dist', 'cli', 'index.js');
-      try { if (statSync(direct).isFile()) candidates.push(direct); } catch { /* not here */ }
+      try { if (statSync(direct).isFile()) return { cmd: 'node', args: [direct], shell: false }; } catch { /* not here */ }
       try {
         for (const hash of readdirSync(verDir)) {
           const candidate = join(verDir, hash, 'node_modules', 'reasonix', 'dist', 'cli', 'index.js');
-          try { if (statSync(candidate).isFile()) candidates.push(candidate); } catch { /* not here */ }
+          try { if (statSync(candidate).isFile()) return { cmd: 'node', args: [candidate], shell: false }; } catch { /* not here */ }
         }
       } catch { /* ver dir not readable */ }
     }
   } catch { /* pnpm global dir doesn't exist */ }
-  // Test each candidate with --version; return the first that works
-  for (const entry of candidates) {
-    try {
-      execFileSync('node', [entry, '--version'], { stdio: 'ignore', timeout: 10_000 });
-      return { cmd: 'node', args: [entry], shell: false };
-    } catch { /* this candidate is broken, try next */ }
-  }
-  // Fallback: let the system resolve `reasonix` via PATH (may break with shell:true)
+  // Last resort: shell mode (will break with special chars in prompt)
   return { cmd: binary, args: [], shell: true };
 }
 
