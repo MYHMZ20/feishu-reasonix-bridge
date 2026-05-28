@@ -101,10 +101,13 @@ export class ReasonixAdapter implements AgentAdapter {
   run(opts: AgentRunOptions): AgentRun {
     const args = [
       ...this.baseArgs,
-      'run',
-      opts.prompt,
+      'code',
       '--output-format',
       'stream-json',
+      '--prompt',
+      opts.prompt,
+      '--no-dashboard',
+      opts.cwd ?? process.cwd(),
     ];
     if (opts.model) args.push('--model', opts.model);
 
