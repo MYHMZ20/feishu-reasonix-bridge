@@ -2,7 +2,6 @@ import dns from 'node:dns';
 import { createInterface } from 'node:readline';
 import pkg from '../../../package.json';
 import { ClaudeAdapter } from '../../agent/claude/adapter';
-import { HermesAdapter } from '../../agent/hermes/adapter';
 import { ReasonixAdapter } from '../../agent/reasonix/adapter';
 import type { AgentAdapter, AgentRouter } from '../../agent/types';
 import { startChannel, type BridgeChannel } from '../../bot/channel';
@@ -81,10 +80,8 @@ export async function runStart(opts: StartOptions): Promise<void> {
 
   const claude = new ClaudeAdapter();
   const reasonix = new ReasonixAdapter();
-  const hermes = new HermesAdapter();
   const adapters = new Map<string, AgentAdapter>([
     ['claude', claude],
-    ['hermes', hermes],
     ['reasonix', reasonix],
   ]);
   // Check at least the default agent is available

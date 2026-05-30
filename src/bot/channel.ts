@@ -202,7 +202,6 @@ export async function startChannel(deps: StartChannelDeps): Promise<BridgeChanne
           controls,
           scope,
           mode,
-          appId: cfg.accounts.app.id,
         });
       } catch (err) {
         log.fail('flush', err);
@@ -439,7 +438,6 @@ interface RunBatchDeps {
   controls: Controls;
   scope: string;
   mode: ChatMode;
-  appId?: string;
 }
 
 async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
@@ -454,7 +452,6 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
     controls,
     scope,
     mode,
-    appId,
   } = deps;
   if (batch.length === 0) return;
   const firstMsg = batch[0];
@@ -496,7 +493,7 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
     }
   }
 
-  const prompt = buildPrompt(batch, attachments, quotes, appId);
+  const prompt = buildPrompt(batch, attachments, quotes);
   log.info('prompt', 'built', { promptChars: prompt.length, quotes: quotes.length });
 
   const cwd = workspaces.cwdFor(scope) ?? homedir();
@@ -769,13 +766,12 @@ function buildPrompt(
   batch: NormalizedMessage[],
   attachments: LocalAttachment[],
   quotes: QuotedContext[] = [],
-  appId?: string,
 ): string {
   const fileKeys = batch.flatMap((m) => m.resources.map((r) => r.fileKey));
   const texts = batch
     .map((m) => stripAttachmentRefs(expandedMessageContent(m), fileKeys).trim())
     .filter(Boolean);
-  const ctxHeader = buildBridgeContextHeader(batch, appId);
+  const ctxHeader = buildBridgeContextHeader(batch);
   const quoteBlock = renderQuotedBlock(quotes);
 
   // Order: <bridge_context> (metadata) → <quoted_message>(s) (what user is
@@ -803,7 +799,7 @@ function buildPrompt(
   return `${prefix}${userPart}\n\n附件（本地路径）：\n${attachLines.join('\n')}`;
 }
 
-function buildBridgeContextHeader(batch: NormalizedMessage[], appId?: string): string {
+function buildBridgeContextHeader(batch: NormalizedMessage[]): string {
   const m = batch[0];
   if (!m) return '';
   const lines = [
@@ -814,7 +810,6 @@ function buildBridgeContextHeader(batch: NormalizedMessage[], appId?: string): s
   ];
   if (m.senderName) lines.push(`sender_name: ${m.senderName}`);
   if (m.threadId) lines.push(`thread_id: ${m.threadId}`);
-  if (appId) lines.push(`app_id: ${appId}`);
   lines.push('</bridge_context>');
   return lines.join('\n');
 }

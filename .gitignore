@@ -17,7 +17,3 @@ coverage/
 scripts/
 test-*.mjs
 CHANGELOG.md
-
-# Reasonix workflow
-.reasonix-tasks/
-.reasonix-logs/
